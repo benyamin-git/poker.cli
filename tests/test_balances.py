@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from pokerpot import repo
+from poker import repo
 
 
 @pytest.fixture

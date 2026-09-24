@@ -5,14 +5,14 @@ from pathlib import Path
 from conftest import output_of
 from typer.testing import CliRunner
 
-from pokerpot import db
-from pokerpot.cli import app
+from poker import db
+from poker.cli import app
 
 
 def test_version(invoke) -> None:
     result = invoke("--version")
     assert result.exit_code == 0
-    assert "pokerpot" in result.output
+    assert "poker.cli" in result.output
 
 
 def test_player_add_list_show(invoke) -> None:

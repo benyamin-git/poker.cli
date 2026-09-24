@@ -1,4 +1,4 @@
-# PokerPot — Implementation Plan v2
+# poker.cli — Implementation Plan v2
 
 > Status: implemented as v0.1.0. See README.md for usage.
 
@@ -60,8 +60,8 @@ SQLite, no server, no network, runs in Termux and on desktop Linux. Python
   documented honestly.
 - Timestamps stored UTC ISO-8601, displayed in local time. Default session name
   is the local `Session YYYY-MM-DD HH:MM`.
-- DB at `$XDG_DATA_HOME/pokerpot/pokerpot.db`, falling back to
-  `~/.local/share/pokerpot/pokerpot.db`; override via `--db` / `POKERPOT_DB`.
+- DB at `$XDG_DATA_HOME/poker.cli/poker.db`, falling back to
+  `~/.local/share/poker.cli/poker.db`; override via `--db` / `POKER_DB`.
 - Averages/medians are rounded half-away-from-zero to the nearest cent;
   documented.
 - `player show` / `stats` accept a name (case-insensitive) or numeric ID.
@@ -71,9 +71,9 @@ SQLite, no server, no network, runs in Termux and on desktop Linux. Python
 ## 5. Layout & tooling
 
 ```
-pyproject.toml            # hatchling, console script pokerpot, deps typer/rich
+pyproject.toml            # hatchling, console script poker, deps typer/rich
 README.md  LICENSE  .gitignore  plan.md
-src/pokerpot/
+src/poker/
   __init__.py  __main__.py  cli.py        # thin Typer layer
   db.py        repo.py                    # connection+migrations; typed queries
   accounting.py settlement.py stats.py    # pure engine, no CLI imports
@@ -82,7 +82,7 @@ src/pokerpot/
 tests/  test_money, test_accounting, test_settlement, test_stats, test_db, test_cli
 ```
 
-`python -m pokerpot` also works. The engine is CLI-independent and fully
+`python -m poker` also works. The engine is CLI-independent and fully
 unit-tested.
 
 ## 6. Schema (migration v1, `PRAGMA user_version`)
@@ -126,7 +126,7 @@ produce no transfers. Shown on `session end`, previewable with
 ## 9. CLI surface
 
 ```
-pokerpot [--db PATH] --version
+poker [--db PATH] --version
 player add NAME | list | show NAME|ID | rename OLD NEW | delete NAME|ID
 session start [--name N] [--players a,b,c] | list | show [ID] [--rounds] [--settlement]
 session add-player NAME | remove-player NAME|ID | end [ID] [--yes] | reopen ID

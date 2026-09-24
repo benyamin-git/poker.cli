@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from pokerpot import repo
-from pokerpot.errors import ConflictError, NotFoundError, StateError, ValidationError
+from poker import repo
+from poker.errors import ConflictError, NotFoundError, StateError, ValidationError
 
 
 def _players(conn: sqlite3.Connection, *names: str) -> list[repo.Player]:

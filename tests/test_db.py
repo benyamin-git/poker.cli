@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pokerpot import db, repo
+from poker import db, repo
 
 
 def test_connect_creates_database_file(db_path: Path) -> None:
@@ -16,7 +16,7 @@ def test_connect_creates_database_file(db_path: Path) -> None:
 
 
 def test_connect_creates_parent_directories(tmp_path: Path) -> None:
-    path = tmp_path / "nested" / "data" / "pokerpot.db"
+    path = tmp_path / "nested" / "data" / "poker.db"
     conn = db.connect(path)
     assert path.exists()
     conn.close()
@@ -124,9 +124,9 @@ def test_resolve_db_path_prefers_override(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert db.resolve_db_path(override) == override
     assert db.resolve_db_path() == tmp_path / "env.db"
     monkeypatch.delenv(db.DB_ENV_VAR)
-    assert db.resolve_db_path().name == "pokerpot.db"
+    assert db.resolve_db_path().name == "poker.db"
 
 
 def test_default_db_path_uses_xdg(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
-    assert db.default_db_path() == tmp_path / "xdg" / "pokerpot" / "pokerpot.db"
+    assert db.default_db_path() == tmp_path / "xdg" / "poker.cli" / "poker.db"

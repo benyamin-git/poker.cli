@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pokerpot.settlement import settle
+from poker.settlement import settle
 
 
 def test_settle_empty() -> None:

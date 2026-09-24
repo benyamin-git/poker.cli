@@ -7,9 +7,9 @@ import sqlite3
 
 import pytest
 
-from pokerpot import repo
-from pokerpot.export import ExportData, session_to_csv, session_to_json, session_to_text
-from pokerpot.settlement import settle
+from poker import repo
+from poker.export import ExportData, session_to_csv, session_to_json, session_to_text
+from poker.settlement import settle
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def test_balances_are_reproducible(data: ExportData) -> None:
 def test_text_export_is_plain_and_complete(data: ExportData) -> None:
     text = session_to_text(data)
     assert "\x1b" not in text
-    assert "PokerPot session report" in text
+    assert "poker.cli session report" in text
     assert "Session:  Friday Poker" in text
     assert "Round 1" in text
     assert "Round 2" in text

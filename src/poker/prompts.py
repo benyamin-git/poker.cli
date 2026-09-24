@@ -6,10 +6,10 @@ import sqlite3
 
 import typer
 
-from pokerpot import accounting, repo
-from pokerpot.errors import NotFoundError, StateError, ValidationError
-from pokerpot.money import format_money, parse_money
-from pokerpot.render import console, delta_table, player_table
+from poker import accounting, repo
+from poker.errors import NotFoundError, StateError, ValidationError
+from poker.money import format_money, parse_money
+from poker.render import console, delta_table, player_table
 
 
 def resolve_player_token(
@@ -79,7 +79,7 @@ def ask_round(
     if len(roster) < 2:
         raise StateError(
             "Recording a round needs at least two players in the session. "
-            "Add one with: pokerpot session add-player NAME"
+            "Add one with: poker session add-player NAME"
         )
     number = repo.next_round_number(conn, session.id)
     used: set[int] = set()

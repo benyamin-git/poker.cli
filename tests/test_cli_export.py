@@ -30,7 +30,7 @@ def test_export_text_default(invoke) -> None:
     _sample_session(invoke)
     result = invoke("session", "export")
     assert result.exit_code == 0
-    assert "PokerPot session report" in result.output
+    assert "poker.cli session report" in result.output
     assert "\x1b" not in result.output
     assert "Checks" in result.output
 
@@ -60,7 +60,7 @@ def test_export_to_file(invoke, tmp_path) -> None:
     result = invoke("session", "export", "--output", str(target))
     assert result.exit_code == 0
     assert target.exists()
-    assert "PokerPot session report" in target.read_text(encoding="utf-8")
+    assert "poker.cli session report" in target.read_text(encoding="utf-8")
 
 
 def test_export_completed_session_by_id(invoke) -> None:
@@ -68,7 +68,7 @@ def test_export_completed_session_by_id(invoke) -> None:
     invoke("session", "end", "--yes")
     result = invoke("session", "export", "1")
     assert result.exit_code == 0
-    assert "PokerPot session report" in result.output
+    assert "poker.cli session report" in result.output
     assert "Status:   completed" in result.output
 
 

@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from pokerpot import repo
-from pokerpot.errors import StateError, ValidationError
+from poker import repo
+from poker.errors import StateError, ValidationError
 
 
 @pytest.fixture
@@ -114,7 +114,7 @@ def test_undo_rejects_ended_session(conn: sqlite3.Connection, session: repo.Sess
 
 
 def test_get_round_unknown(conn: sqlite3.Connection) -> None:
-    from pokerpot.errors import NotFoundError
+    from poker.errors import NotFoundError
 
     with pytest.raises(NotFoundError):
         repo.get_round(conn, 99)

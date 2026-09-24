@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from pokerpot import repo
-from pokerpot.errors import ConflictError, NotFoundError, ValidationError
+from poker import repo
+from poker.errors import ConflictError, NotFoundError, ValidationError
 
 
 def test_add_and_get_by_name_and_id(conn: sqlite3.Connection) -> None:

@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 
-class PokerPotError(Exception):
-    """Base class for all expected PokerPot errors."""
+class PokerError(Exception):
+    """Base class for all expected poker.cli errors."""
 
 
-class NotFoundError(PokerPotError):
+class NotFoundError(PokerError):
     """A requested record does not exist."""
 
 
-class ValidationError(PokerPotError):
+class ValidationError(PokerError):
     """User input violates an accounting or format rule."""
 
 
-class StateError(PokerPotError):
+class StateError(PokerError):
     """The command is not valid for the current application state."""
 
 
-class ConflictError(PokerPotError):
+class ConflictError(PokerError):
     """The change conflicts with existing data."""

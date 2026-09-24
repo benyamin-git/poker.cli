@@ -1,6 +1,6 @@
 """Accounting statistics for players.
 
-PokerPot only records money movements (who lost what, who won the pot). These
+poker.cli only records money movements (who lost what, who won the pot). These
 statistics are honest about that: they measure results, never poker skill.
 Break-even sessions count in the win-rate denominator and reset streaks.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pokerpot.repo import Round, Session
+from poker.repo import Round, Session
 
 
 @dataclass(frozen=True)

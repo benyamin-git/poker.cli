@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from pokerpot.errors import ValidationError
-from pokerpot.money import format_money, parse_money
+from poker.errors import ValidationError
+from poker.money import format_money, parse_money
 
 
 @pytest.mark.parametrize(

@@ -6,7 +6,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-DB_ENV_VAR = "POKERPOT_DB"
+DB_ENV_VAR = "POKER_DB"
 
 _MIGRATION_1 = (
     """
@@ -67,7 +67,7 @@ def default_db_path() -> Path:
     """Return the conventional database location."""
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "pokerpot" / "pokerpot.db"
+    return base / "poker.cli" / "poker.db"
 
 
 def resolve_db_path(override: Path | None = None) -> Path:

@@ -6,9 +6,9 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from pokerpot import accounting
-from pokerpot.accounting import validate_round
-from pokerpot.errors import ConflictError, NotFoundError, StateError, ValidationError
+from poker import accounting
+from poker.accounting import validate_round
+from poker.errors import ConflictError, NotFoundError, StateError, ValidationError
 
 MAX_NAME_LENGTH = 40
 MAX_SESSION_NAME_LENGTH = 60
@@ -209,7 +209,7 @@ def require_active_session(conn: sqlite3.Connection) -> Session:
     """Return the active session or raise a state error."""
     session = get_active_session(conn)
     if session is None:
-        raise StateError("No active session. Start one with: pokerpot session start")
+        raise StateError("No active session. Start one with: poker session start")
     return session
 
 
@@ -237,7 +237,7 @@ def list_sessions(conn: sqlite3.Connection, status: str | None = None) -> list[S
 def start_session(conn: sqlite3.Connection, name: str | None, player_ids: list[int]) -> Session:
     """Start a new session with the given players."""
     if get_active_session(conn) is not None:
-        raise StateError("A session is already active. End it first with: pokerpot session end")
+        raise StateError("A session is already active. End it first with: poker session end")
     cleaned = _clean_session_name(name)
     unique_ids = list(dict.fromkeys(player_ids))
     if not unique_ids:
@@ -255,7 +255,7 @@ def start_session(conn: sqlite3.Connection, name: str | None, player_ids: list[i
             )
     except sqlite3.IntegrityError as exc:
         raise StateError(
-            "A session is already active. End it first with: pokerpot session end"
+            "A session is already active. End it first with: poker session end"
         ) from exc
     return get_session(conn, session_id)
 
@@ -280,8 +280,7 @@ def add_session_player(conn: sqlite3.Connection, session_id: int, ref: str) -> t
     session = get_session(conn, session_id)
     if session.status != "active":
         raise StateError(
-            f"Session {session.name!r} has ended. Reopen it with: "
-            f"pokerpot session reopen {session.id}"
+            f"Session {session.name!r} has ended. Reopen it with: poker session reopen {session.id}"
         )
     created = False
     try:
@@ -305,8 +304,7 @@ def remove_session_player(conn: sqlite3.Connection, session_id: int, ref: str) -
     session = get_session(conn, session_id)
     if session.status != "active":
         raise StateError(
-            f"Session {session.name!r} has ended. Reopen it with: "
-            f"pokerpot session reopen {session.id}"
+            f"Session {session.name!r} has ended. Reopen it with: poker session reopen {session.id}"
         )
     player = get_player(conn, ref)
     in_session = conn.execute(
@@ -358,7 +356,7 @@ def reopen_session(conn: sqlite3.Connection, session_id: int) -> Session:
     active = get_active_session(conn)
     if active is not None:
         raise StateError(
-            f"Session {active.name!r} is still active. End it first with: pokerpot session end"
+            f"Session {active.name!r} is still active. End it first with: poker session end"
         )
     with conn:
         conn.execute(
@@ -434,8 +432,7 @@ def add_round(
     session = get_session(conn, session_id)
     if session.status != "active":
         raise StateError(
-            f"Session {session.name!r} has ended. Reopen it with: "
-            f"pokerpot session reopen {session.id}"
+            f"Session {session.name!r} has ended. Reopen it with: poker session reopen {session.id}"
         )
     validate_round(loser_amounts, winner_amounts)
     roster = _session_player_ids(conn, session_id)
@@ -495,8 +492,7 @@ def undo_last_round(conn: sqlite3.Connection, session_id: int) -> Round:
     session = get_session(conn, session_id)
     if session.status != "active":
         raise StateError(
-            f"Session {session.name!r} has ended. Reopen it with: "
-            f"pokerpot session reopen {session.id}"
+            f"Session {session.name!r} has ended. Reopen it with: poker session reopen {session.id}"
         )
     round_ = last_round(conn, session_id)
     if round_ is None:

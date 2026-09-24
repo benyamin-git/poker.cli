@@ -1,4 +1,4 @@
-from pokerpot.cli import app
+from poker.cli import app
 
 if __name__ == "__main__":
     app()

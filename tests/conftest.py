@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from pokerpot import db
-from pokerpot.cli import app
+from poker import db
+from poker.cli import app
 
 
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
-    return tmp_path / "pokerpot.db"
+    return tmp_path / "poker.db"
 
 
 @pytest.fixture

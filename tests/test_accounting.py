@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from pokerpot.accounting import (
+from poker.accounting import (
     equal_winner_amounts,
     round_net,
     session_balances,
     split_pot,
     validate_round,
 )
-from pokerpot.errors import ValidationError
+from poker.errors import ValidationError
 
 
 def test_split_pot_even() -> None:

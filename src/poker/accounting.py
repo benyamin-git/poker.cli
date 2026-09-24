@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from pokerpot.errors import ValidationError
-from pokerpot.money import format_money
+from poker.errors import ValidationError
+from poker.money import format_money
 
 Participant = tuple[int, str, int]  # (player_id, role, amount_cents)
 

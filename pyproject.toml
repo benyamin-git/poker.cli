@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pokerpot"
+name = "poker.cli"
 version = "0.1.0"
 description = "A CLI ledger for poker-night money between friends"
 readme = "README.md"
@@ -34,13 +34,13 @@ dev = [
 ]
 
 [project.scripts]
-pokerpot = "pokerpot.cli:app"
+poker = "poker.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/benyamin-git/poker.cli"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pokerpot"]
+packages = ["src/poker"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -53,4 +53,4 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/pokerpot/cli.py" = ["B008"]  # typer.Option/Argument are the documented Typer style
+"src/poker/cli.py" = ["B008"]  # typer.Option/Argument are the documented Typer style

@@ -1,4 +1,4 @@
-"""Command-line interface for PokerPot."""
+"""Command-line interface for poker.cli."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from typing import Any, TypeVar, cast
 
 import typer
 
-from pokerpot import __version__, accounting, db, export, prompts, repo, settlement, stats
-from pokerpot.errors import NotFoundError, PokerPotError, StateError, ValidationError
-from pokerpot.money import format_money, parse_money
-from pokerpot.render import (
+from poker import __version__, accounting, db, export, prompts, repo, settlement, stats
+from poker.errors import NotFoundError, PokerError, StateError, ValidationError
+from poker.money import format_money, parse_money
+from poker.render import (
     balance_table,
     console,
     delta_table,
@@ -30,7 +30,7 @@ from pokerpot.render import (
 )
 
 app = typer.Typer(
-    name="pokerpot",
+    name="poker",
     help="Track poker-night money between friends: rounds, balances, settlement.",
     no_args_is_help=True,
     add_completion=False,
@@ -38,7 +38,7 @@ app = typer.Typer(
 player_app = typer.Typer(help="Manage players.", no_args_is_help=True)
 session_app = typer.Typer(help="Manage poker sessions.", no_args_is_help=True)
 round_app = typer.Typer(
-    help="Record and inspect rounds. Run 'pokerpot round' for interactive entry.",
+    help="Record and inspect rounds. Run 'poker round' for interactive entry.",
     no_args_is_help=False,
 )
 app.add_typer(player_app, name="player")
@@ -60,7 +60,7 @@ def handle_errors(func: F) -> F:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
-        except PokerPotError as exc:
+        except PokerError as exc:
             err_console.print(f"[bold red]Error:[/bold red] {exc}")
             raise typer.Exit(1) from exc
         except sqlite3.Error as exc:  # pragma: no cover - safety net
@@ -82,7 +82,7 @@ def _db(ctx: typer.Context) -> Iterator[sqlite3.Connection]:
 
 def _show_version(value: bool) -> None:
     if value:
-        typer.echo(f"pokerpot {__version__}")
+        typer.echo(f"poker.cli {__version__}")
         raise typer.Exit()
 
 
@@ -104,7 +104,7 @@ def main(
         show_default=False,
     ),
 ) -> None:
-    """PokerPot: a local-only CLI ledger for poker sessions."""
+    """poker.cli: a local-only CLI ledger for poker sessions."""
     ctx.obj = AppState(db_path=db_path)
 
 
@@ -127,7 +127,7 @@ def player_list(ctx: typer.Context) -> None:
     with _db(ctx) as conn:
         players = repo.list_players(conn)
     if not players:
-        console.print("No players yet. Add one with: pokerpot player add NAME")
+        console.print("No players yet. Add one with: poker player add NAME")
         return
     console.print(player_table(players))
 
@@ -226,7 +226,7 @@ def session_start(
             players = prompts.select_players(conn)
         session = repo.start_session(conn, name, [player.id for player in players])
     console.print(f"Started session [bold]{session.name}[/bold] (id {session.id}).")
-    console.print("Record rounds with: pokerpot round")
+    console.print("Record rounds with: poker round")
 
 
 @session_app.command("list")
@@ -236,7 +236,7 @@ def session_list(ctx: typer.Context) -> None:
     with _db(ctx) as conn:
         sessions = repo.list_sessions(conn)
     if not sessions:
-        console.print("No sessions yet. Start one with: pokerpot session start")
+        console.print("No sessions yet. Start one with: poker session start")
         return
     console.print(session_table(sessions))
 
@@ -343,7 +343,7 @@ def session_end(
     else:
         console.print("All settled up.")
     console.print()
-    console.print(f"View it with: pokerpot session show {ended.id}")
+    console.print(f"View it with: poker session show {ended.id}")
 
 
 @session_app.command("reopen")
@@ -433,11 +433,11 @@ def stats_command(
         if player is None:
             players = repo.list_players(conn)
             if not players:
-                console.print("No players yet. Add one with: pokerpot player add NAME")
+                console.print("No players yet. Add one with: poker player add NAME")
                 return
             by_id = {found.id: stats.compute_player_stats(found.id, records) for found in players}
             console.print(stats_table(players, by_id))
-            console.print("Completed sessions only; use 'pokerpot stats PLAYER' for details.")
+            console.print("Completed sessions only; use 'poker stats PLAYER' for details.")
             return
         found = repo.get_player(conn, player)
         player_stats = stats.compute_player_stats(found.id, records)
@@ -454,7 +454,7 @@ def history(ctx: typer.Context) -> None:
         console.print("No completed sessions yet.")
         return
     console.print(session_table(sessions))
-    console.print("Use 'pokerpot session show <id>' for details.")
+    console.print("Use 'poker session show <id>' for details.")
 
 
 def _participant_names(conn: sqlite3.Connection, player_ids: list[int]) -> dict[int, str]:

@@ -7,9 +7,9 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
-from pokerpot.money import format_money
-from pokerpot.repo import Participant, Player, Round, Session
-from pokerpot.stats import PlayerStats
+from poker.money import format_money
+from poker.repo import Participant, Player, Round, Session
+from poker.stats import PlayerStats
 
 console = Console()
 err_console = Console(stderr=True)

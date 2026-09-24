@@ -1,8 +1,8 @@
-# PokerPot
+# poker.cli
 
 A CLI-only ledger for poker-night money between friends.
 
-PokerPot records one thing: **who lost how much and who won the resulting
+poker.cli records one thing: **who lost how much and who won the resulting
 pot**. From that ledger it derives session balances, a simplified settlement,
 full history and honest accounting statistics. Everything is stored locally in
 a single SQLite file. No accounts, no server, no network, no TUI.
@@ -13,7 +13,7 @@ on any normal Linux system.
 ## Why
 
 Settling up after a poker night is usually a group-chat argument: someone
-half-remembers who owes what. PokerPot keeps a verifiable ledger. At the end of
+half-remembers who owes what. poker.cli keeps a verifiable ledger. At the end of
 the night it prints final standings and a short list of transfers that settles
 everyone, and it can export the whole session so friends can independently
 check that the numbers are not arbitrary.
@@ -50,8 +50,8 @@ Or with pip:
 python3 -m pip install .
 ```
 
-This installs a `pokerpot` command. You can also run it without installing:
-`python3 -m pokerpot --help`.
+This installs a `poker` command. You can also run it without installing:
+`python3 -m poker --help`.
 
 ### Termux
 
@@ -60,7 +60,7 @@ pkg install python git
 git clone https://github.com/benyamin-git/poker.cli
 cd poker.cli
 pip install .
-pokerpot --help
+poker --help
 ```
 
 All dependencies are pure Python, so no compiler is needed.
@@ -68,44 +68,44 @@ All dependencies are pure Python, so no compiler is needed.
 ## Quick start
 
 ```sh
-pokerpot player add Alice
-pokerpot player add Bob
-pokerpot player add Carol
+poker player add Alice
+poker player add Bob
+poker player add Carol
 
-pokerpot session start --name "Friday Poker" --players Alice,Bob,Carol
-# or run 'pokerpot session start' for an interactive player picker
+poker session start --name "Friday Poker" --players Alice,Bob,Carol
+# or run 'poker session start' for an interactive player picker
 
 # Interactive round entry:
-pokerpot round
+poker round
 
 # Or scriptable entry: NAME=AMOUNT for losers, NAME (or NAME=AMOUNT) for winners
-pokerpot round add --loser Alice=20 --winner Bob
-pokerpot round add --loser Bob=30 --loser Carol=10 --winner Alice
-pokerpot round add --loser Alice=50 --winner Bob=30 --winner Carol=20
+poker round add --loser Alice=20 --winner Bob
+poker round add --loser Bob=30 --loser Carol=10 --winner Alice
+poker round add --loser Alice=50 --winner Bob=30 --winner Carol=20
 
-pokerpot session show            # current balances
-pokerpot session show --rounds   # add the round-by-round ledger
-pokerpot round undo              # remove the most recent round
+poker session show            # current balances
+poker session show --rounds   # add the round-by-round ledger
+poker round undo              # remove the most recent round
 
-pokerpot session end             # final standings + settlement
+poker session end             # final standings + settlement
 ```
 
 Later:
 
 ```sh
-pokerpot history
-pokerpot stats
-pokerpot stats Bob
-pokerpot session show 1 --settlement
-pokerpot session export 1
+poker history
+poker stats
+poker stats Bob
+poker session show 1 --settlement
+poker session export 1
 ```
 
-Run `pokerpot --help` or `pokerpot <command> --help` for every option.
+Run `poker --help` or `poker <command> --help` for every option.
 
 ## How a round works
 
 A round has one or more losers and one or more winners. The losers' amounts
-form the pot; the winners receive it. PokerPot refuses to record a round unless
+form the pot; the winners receive it. poker.cli refuses to record a round unless
 the losses and winnings balance exactly:
 
 ```text
@@ -137,8 +137,8 @@ The settlement is produced by a deterministic greedy algorithm: the largest
 debtor pays the largest creditor until everyone is square, with ties broken by
 player ID. This keeps the number of transfers small, but it is not guaranteed
 to be the mathematically smallest possible set (finding that is NP-hard). The
-settlement is shown by `pokerpot session end`, can be previewed mid-session
-with `pokerpot session show --settlement`, and is included in every export.
+settlement is shown by `poker session end`, can be previewed mid-session
+with `poker session show --settlement`, and is included in every export.
 
 ```text
 Settlement
@@ -152,8 +152,8 @@ Settlement
 - Players can be added to an active session at any time (including from inside
   round entry); they can be removed only if they have no rounds in that
   session.
-- `pokerpot round undo` removes the most recent round of the active session.
-- Completed sessions are historical records: `pokerpot session reopen <id>`
+- `poker round undo` removes the most recent round of the active session.
+- Completed sessions are historical records: `poker session reopen <id>`
   flips one back to active for corrections, then end it again. There is no
   delete command.
 - Players keep their identity (and history) when renamed. A player can be
@@ -164,25 +164,25 @@ Settlement
 The database lives at:
 
 ```text
-$XDG_DATA_HOME/pokerpot/pokerpot.db
+$XDG_DATA_HOME/poker.cli/poker.db
 ```
 
-falling back to `~/.local/share/pokerpot/pokerpot.db`. The file is created
+falling back to `~/.local/share/poker.cli/poker.db`. The file is created
 automatically on first run.
 
-- Use another database with `--db PATH` or the `POKERPOT_DB` environment
+- Use another database with `--db PATH` or the `POKER_DB` environment
   variable.
 - **Backup:** copy the single `.db` file. That is the entire state.
-- Everything is offline; PokerPot never makes network requests.
+- Everything is offline; poker.cli never makes network requests.
 
 ## Exports
 
 ```sh
-pokerpot session export            # active session as a plain-text report
-pokerpot session export 1          # a completed session by ID
-pokerpot session export 1 -f json  # machine-readable JSON
-pokerpot session export 1 -f csv   # long-format ledger rows
-pokerpot session export 1 -o report.txt
+poker session export            # active session as a plain-text report
+poker session export 1          # a completed session by ID
+poker session export 1 -f json  # machine-readable JSON
+poker session export 1 -f csv   # long-format ledger rows
+poker session export 1 -o report.txt
 ```
 
 - **text** (default): plain text with no colors or escape codes, ready to paste
@@ -195,10 +195,10 @@ pokerpot session export 1 -o report.txt
 
 ## Statistics
 
-`pokerpot stats` prints a summary for every player; `pokerpot stats NAME`
+`poker stats` prints a summary for every player; `poker stats NAME`
 prints full details. Only **completed** sessions are counted.
 
-PokerPot only knows money movements. These are *accounting* statistics, not
+poker.cli only knows money movements. These are *accounting* statistics, not
 poker-skill statistics. It does not (and cannot) compute ROI, EV, VPIP,
 aggression, win probability or anything that would require cards, hands,
 blinds or betting decisions. Nothing is collected that could support those
@@ -227,7 +227,7 @@ from zero to the nearest cent.
 
 ## Error handling
 
-PokerPot never silently accepts invalid financial data. Examples of rejected
+poker.cli never silently accepts invalid financial data. Examples of rejected
 input: negative or zero amounts, malformed amounts, unbalanced pots, a player
 in both roles of one round, players outside the session, duplicate players,
 operations on an ended session, invalid IDs and attempts to delete history.
@@ -246,7 +246,7 @@ python3 -m venv .venv
 .venv/bin/ruff format .     # format
 ```
 
-The accounting engine (`src/pokerpot/accounting.py`), settlement
+The accounting engine (`src/poker/accounting.py`), settlement
 (`settlement.py`) and statistics (`stats.py`) are pure functions with no
 database or CLI dependencies, so they are easy to test in isolation. The
 database layer lives in `db.py` and `repo.py`; all terminal output is

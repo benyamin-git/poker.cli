@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from pokerpot import accounting, repo
-from pokerpot.errors import NotFoundError
-from pokerpot.stats import SessionRecord, compute_player_stats, round_div
+from poker import accounting, repo
+from poker.errors import NotFoundError
+from poker.stats import SessionRecord, compute_player_stats, round_div
 
 
 def _id(conn: sqlite3.Connection, name: str) -> int:

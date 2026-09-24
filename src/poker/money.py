@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from pokerpot.errors import ValidationError
+from poker.errors import ValidationError
 
 _MONEY_RE = re.compile(r"^\$?\s*(\d{1,12})(?:\.(\d{1,2}))?$")
 

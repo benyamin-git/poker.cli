@@ -10,10 +10,10 @@ import io
 import json
 from dataclasses import dataclass
 
-from pokerpot.money import format_money
-from pokerpot.render import local_time
-from pokerpot.repo import Player, Round, Session, now_utc
-from pokerpot.settlement import Transfer
+from poker.money import format_money
+from poker.render import local_time
+from poker.repo import Player, Round, Session, now_utc
+from poker.settlement import Transfer
 
 SCHEMA_VERSION = 1
 FORMATS = ("text", "json", "csv")
@@ -42,7 +42,7 @@ def session_to_text(data: ExportData) -> str:
     """Render a verification-friendly plain-text report."""
     session = data.session
     names = {player.id: player.name for player in data.players}
-    title = "PokerPot session report"
+    title = "poker.cli session report"
     lines = [title, "=" * len(title), ""]
     lines.append(f"Session:  {session.name}")
     lines.append(f"ID:       {session.id}")
