@@ -7,7 +7,8 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
-from pokerpot.repo import Player, Session
+from pokerpot.money import format_money
+from pokerpot.repo import Participant, Player, Round, Session
 
 console = Console()
 err_console = Console(stderr=True)
@@ -37,6 +38,39 @@ def session_table(sessions: list[Session]) -> Table:
             str(session.round_count),
             local_time(session.started_at),
             local_time(session.ended_at) if session.ended_at else "-",
+        )
+    return table
+
+
+def delta_table(entries: list[tuple[str, int]]) -> Table:
+    table = Table(header_style="bold", show_header=False, box=None, pad_edge=False)
+    table.add_column("Player")
+    table.add_column("Amount", justify="right")
+    for name, delta in entries:
+        style = "green" if delta > 0 else "red"
+        table.add_row(name, f"[{style}]{format_money(delta, plus=True)}[/{style}]")
+    return table
+
+
+def _participants_text(participants: tuple[Participant, ...]) -> str:
+    return ", ".join(
+        f"{participant.player_name} {format_money(participant.amount_cents)}"
+        for participant in participants
+    )
+
+
+def round_table(rounds: list[Round]) -> Table:
+    table = Table(header_style="bold")
+    table.add_column("#", justify="right")
+    table.add_column("Pot", justify="right")
+    table.add_column("Losers")
+    table.add_column("Winners")
+    for round_ in rounds:
+        table.add_row(
+            str(round_.number),
+            format_money(round_.pot_cents),
+            _participants_text(round_.losers),
+            _participants_text(round_.winners),
         )
     return table
 

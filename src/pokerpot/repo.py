@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pokerpot.accounting import validate_round
 from pokerpot.errors import ConflictError, NotFoundError, StateError, ValidationError
 
 MAX_NAME_LENGTH = 40
@@ -36,6 +37,35 @@ class Session:
     ended_at: str | None
     player_count: int = 0
     round_count: int = 0
+
+
+@dataclass(frozen=True)
+class Participant:
+    player_id: int
+    player_name: str
+    role: str
+    amount_cents: int
+
+
+@dataclass(frozen=True)
+class Round:
+    id: int
+    session_id: int
+    number: int
+    created_at: str
+    participants: tuple[Participant, ...]
+
+    @property
+    def pot_cents(self) -> int:
+        return sum(p.amount_cents for p in self.participants if p.role == "winner")
+
+    @property
+    def losers(self) -> tuple[Participant, ...]:
+        return tuple(p for p in self.participants if p.role == "loser")
+
+    @property
+    def winners(self) -> tuple[Participant, ...]:
+        return tuple(p for p in self.participants if p.role == "winner")
 
 
 def now_utc() -> str:
@@ -335,3 +365,131 @@ def reopen_session(conn: sqlite3.Connection, session_id: int) -> Session:
             (session.id,),
         )
     return get_session(conn, session.id)
+
+
+def _session_player_ids(conn: sqlite3.Connection, session_id: int) -> set[int]:
+    rows = conn.execute(
+        "SELECT player_id FROM session_players WHERE session_id = ?", (session_id,)
+    ).fetchall()
+    return {row["player_id"] for row in rows}
+
+
+def next_round_number(conn: sqlite3.Connection, session_id: int) -> int:
+    """Return the next round number, reusing numbers freed by undo."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(number), 0) + 1 FROM rounds WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    return int(row[0])
+
+
+def _round_from_row(row: sqlite3.Row, participants: list[Participant]) -> Round:
+    return Round(
+        id=row["id"],
+        session_id=row["session_id"],
+        number=row["number"],
+        created_at=row["created_at"],
+        participants=tuple(participants),
+    )
+
+
+def _round_participants(conn: sqlite3.Connection, round_id: int) -> list[Participant]:
+    rows = conn.execute(
+        """
+        SELECT rp.player_id, p.name AS player_name, rp.role, rp.amount_cents
+        FROM round_participants rp
+        JOIN players p ON p.id = rp.player_id
+        WHERE rp.round_id = ?
+        ORDER BY (rp.role = 'winner'), p.name COLLATE NOCASE
+        """,
+        (round_id,),
+    ).fetchall()
+    return [
+        Participant(
+            player_id=row["player_id"],
+            player_name=row["player_name"],
+            role=row["role"],
+            amount_cents=row["amount_cents"],
+        )
+        for row in rows
+    ]
+
+
+def get_round(conn: sqlite3.Connection, round_id: int) -> Round:
+    """Look up a round by ID."""
+    row = conn.execute("SELECT * FROM rounds WHERE id = ?", (round_id,)).fetchone()
+    if row is None:
+        raise NotFoundError(f"Round {round_id} not found.")
+    return _round_from_row(row, _round_participants(conn, round_id))
+
+
+def add_round(
+    conn: sqlite3.Connection,
+    session_id: int,
+    loser_amounts: dict[int, int],
+    winner_amounts: dict[int, int],
+) -> Round:
+    """Validate and record one round atomically."""
+    session = get_session(conn, session_id)
+    if session.status != "active":
+        raise StateError(
+            f"Session {session.name!r} has ended. Reopen it with: "
+            f"pokerpot session reopen {session.id}"
+        )
+    validate_round(loser_amounts, winner_amounts)
+    roster = _session_player_ids(conn, session_id)
+    for player_id in (*loser_amounts, *winner_amounts):
+        if player_id not in roster:
+            player = get_player(conn, str(player_id))
+            raise ValidationError(f"Player {player.name!r} is not in session {session.name!r}.")
+    number = next_round_number(conn, session_id)
+    created_at = now_utc()
+    rows = [(player_id, "loser", amount) for player_id, amount in loser_amounts.items()] + [
+        (player_id, "winner", amount) for player_id, amount in winner_amounts.items()
+    ]
+    with conn:
+        round_id = conn.execute(
+            "INSERT INTO rounds (session_id, number, created_at) VALUES (?, ?, ?)",
+            (session_id, number, created_at),
+        ).lastrowid
+        conn.executemany(
+            "INSERT INTO round_participants (round_id, player_id, role, amount_cents) "
+            "VALUES (?, ?, ?, ?)",
+            [(round_id, player_id, role, amount) for player_id, role, amount in rows],
+        )
+    return get_round(conn, round_id)
+
+
+def list_rounds(conn: sqlite3.Connection, session_id: int) -> list[Round]:
+    """Return all rounds of a session in order."""
+    rows = conn.execute(
+        "SELECT * FROM rounds WHERE session_id = ? ORDER BY number", (session_id,)
+    ).fetchall()
+    return [_round_from_row(row, _round_participants(conn, row["id"])) for row in rows]
+
+
+def last_round(conn: sqlite3.Connection, session_id: int) -> Round | None:
+    """Return the most recently recorded round, if any."""
+    row = conn.execute(
+        "SELECT * FROM rounds WHERE session_id = ? ORDER BY number DESC LIMIT 1",
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return _round_from_row(row, _round_participants(conn, row["id"]))
+
+
+def undo_last_round(conn: sqlite3.Connection, session_id: int) -> Round:
+    """Delete the most recent round of an active session."""
+    session = get_session(conn, session_id)
+    if session.status != "active":
+        raise StateError(
+            f"Session {session.name!r} has ended. Reopen it with: "
+            f"pokerpot session reopen {session.id}"
+        )
+    round_ = last_round(conn, session_id)
+    if round_ is None:
+        raise StateError("There are no rounds to undo in this session.")
+    with conn:
+        conn.execute("DELETE FROM rounds WHERE id = ?", (round_.id,))
+    return round_

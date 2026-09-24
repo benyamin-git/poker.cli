@@ -12,9 +12,18 @@ from typing import Any, TypeVar, cast
 
 import typer
 
-from pokerpot import __version__, db, prompts, repo
-from pokerpot.errors import NotFoundError, PokerPotError, ValidationError
-from pokerpot.render import console, err_console, local_time, player_table, session_table
+from pokerpot import __version__, accounting, db, prompts, repo
+from pokerpot.errors import NotFoundError, PokerPotError, StateError, ValidationError
+from pokerpot.money import format_money, parse_money
+from pokerpot.render import (
+    console,
+    delta_table,
+    err_console,
+    local_time,
+    player_table,
+    round_table,
+    session_table,
+)
 
 app = typer.Typer(
     name="pokerpot",
@@ -24,8 +33,10 @@ app = typer.Typer(
 )
 player_app = typer.Typer(help="Manage players.", no_args_is_help=True)
 session_app = typer.Typer(help="Manage poker sessions.", no_args_is_help=True)
+round_app = typer.Typer(help="Record and inspect rounds.", no_args_is_help=False)
 app.add_typer(player_app, name="player")
 app.add_typer(session_app, name="session")
+app.add_typer(round_app, name="round")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -228,11 +239,13 @@ def session_list(ctx: typer.Context) -> None:
 def session_show(
     ctx: typer.Context,
     session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
+    rounds: bool = typer.Option(False, "--rounds", help="Also list every round."),
 ) -> None:
     """Show a session and its players."""
     with _db(ctx) as conn:
         found = _require_session(conn, session)
         players = repo.session_players(conn, found.id)
+        recorded_rounds = repo.list_rounds(conn, found.id) if rounds else []
     console.print(f"Session:  [bold]{found.name}[/bold]")
     console.print(f"ID:       {found.id}")
     console.print(f"Status:   {found.status}")
@@ -244,6 +257,12 @@ def session_show(
         console.print(player_table(players))
     else:
         console.print("No players in this session.")
+    if rounds:
+        console.print()
+        if recorded_rounds:
+            console.print(round_table(recorded_rounds))
+        else:
+            console.print("No rounds recorded yet.")
 
 
 @session_app.command("add-player")
@@ -305,3 +324,144 @@ def session_reopen(
             raise ValidationError("A session ID is required.")
         reopened = repo.reopen_session(conn, session_id)
     console.print(f"Session [bold]{reopened.name}[/bold] (id {reopened.id}) reopened.")
+
+
+def _participant_names(conn: sqlite3.Connection, player_ids: list[int]) -> dict[int, str]:
+    return {player_id: repo.get_player(conn, str(player_id)).name for player_id in player_ids}
+
+
+def _parse_loser_args(conn: sqlite3.Connection, tokens: list[str]) -> dict[int, int]:
+    if not tokens:
+        raise ValidationError("A round needs at least one --loser NAME=AMOUNT.")
+    losers: dict[int, int] = {}
+    for token in tokens:
+        name, separator, amount_text = token.partition("=")
+        if not separator or not name.strip() or not amount_text.strip():
+            raise ValidationError(f"--loser expects NAME=AMOUNT, got {token!r}.")
+        player = repo.get_player(conn, name.strip())
+        if player.id in losers:
+            raise ValidationError(f"{player.name} is listed twice as a loser.")
+        losers[player.id] = parse_money(amount_text)
+    return losers
+
+
+def _parse_winner_args(
+    conn: sqlite3.Connection, tokens: list[str], pot_cents: int
+) -> dict[int, int]:
+    if not tokens:
+        raise ValidationError("A round needs at least one --winner NAME or NAME=AMOUNT.")
+    order: list[int] = []
+    amounts: dict[int, int] = {}
+    with_amount = 0
+    for token in tokens:
+        name, separator, amount_text = token.partition("=")
+        if not name.strip():
+            raise ValidationError(f"--winner expects NAME or NAME=AMOUNT, got {token!r}.")
+        player = repo.get_player(conn, name.strip())
+        if player.id in order:
+            raise ValidationError(f"{player.name} is listed twice as a winner.")
+        order.append(player.id)
+        if separator:
+            if not amount_text.strip():
+                raise ValidationError(f"--winner expects NAME or NAME=AMOUNT, got {token!r}.")
+            amounts[player.id] = parse_money(amount_text)
+            with_amount += 1
+    if with_amount == 0:
+        return accounting.equal_winner_amounts(pot_cents, order)
+    if with_amount != len(order):
+        raise ValidationError(
+            "Give an amount for either all winners or none, so the pot split is unambiguous."
+        )
+    return amounts
+
+
+def _preview_and_confirm(
+    conn: sqlite3.Connection, losers: dict[int, int], winners: dict[int, int]
+) -> bool:
+    accounting.validate_round(losers, winners)
+    names = _participant_names(conn, [*losers, *winners])
+    entries = [(names[player_id], -amount) for player_id, amount in losers.items()]
+    entries += [(names[player_id], amount) for player_id, amount in winners.items()]
+    console.print(f"Pot: [bold]{format_money(sum(losers.values()))}[/bold]")
+    console.print(delta_table(entries))
+    return typer.confirm("Record this round?", default=True)
+
+
+@round_app.callback(invoke_without_command=True)
+@handle_errors
+def round_group(ctx: typer.Context) -> None:
+    """Record a round for the active session (interactive)."""
+    if ctx.invoked_subcommand is not None:
+        return
+    with _db(ctx) as conn:
+        session = repo.require_active_session(conn)
+        roster = repo.session_players(conn, session.id)
+        result = prompts.ask_round(conn, session, roster)
+        if result is None:
+            console.print("Round cancelled.")
+            return
+        losers, winners = result
+        recorded = repo.add_round(conn, session.id, losers, winners)
+    console.print(
+        f"Recorded round [bold]{recorded.number}[/bold] (pot {format_money(recorded.pot_cents)})."
+    )
+
+
+@round_app.command("add")
+@handle_errors
+def round_add(
+    ctx: typer.Context,
+    loser: list[str] = typer.Option([], "--loser", help="Repeatable: NAME=AMOUNT."),
+    winner: list[str] = typer.Option(
+        [], "--winner", help="Repeatable: NAME or NAME=AMOUNT; omit amounts to split equally."
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+) -> None:
+    """Record a round non-interactively."""
+    with _db(ctx) as conn:
+        session = repo.require_active_session(conn)
+        losers = _parse_loser_args(conn, loser)
+        winners = _parse_winner_args(conn, winner, sum(losers.values()))
+        if not yes and not _preview_and_confirm(conn, losers, winners):
+            console.print("Round cancelled.")
+            return
+        recorded = repo.add_round(conn, session.id, losers, winners)
+    console.print(
+        f"Recorded round [bold]{recorded.number}[/bold] (pot {format_money(recorded.pot_cents)})."
+    )
+
+
+@round_app.command("list")
+@handle_errors
+def round_list(
+    ctx: typer.Context,
+    session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
+) -> None:
+    """List the rounds of a session."""
+    with _db(ctx) as conn:
+        found = _require_session(conn, session)
+        rounds = repo.list_rounds(conn, found.id)
+    if not rounds:
+        console.print("No rounds recorded yet.")
+        return
+    console.print(round_table(rounds))
+
+
+@round_app.command("undo")
+@handle_errors
+def round_undo(
+    ctx: typer.Context,
+    session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+) -> None:
+    """Remove the most recently recorded round."""
+    with _db(ctx) as conn:
+        found = _require_session(conn, session)
+        last = repo.last_round(conn, found.id)
+        if last is None:
+            raise StateError("There are no rounds to undo in this session.")
+        if not yes:
+            console.print(round_table([last]))
+            typer.confirm(f"Remove round {last.number}?", abort=True)
+        removed = repo.undo_last_round(conn, found.id)
+    console.print(f"Removed round {removed.number}.")
