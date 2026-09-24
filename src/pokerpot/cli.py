@@ -12,7 +12,7 @@ from typing import Any, TypeVar, cast
 
 import typer
 
-from pokerpot import __version__, accounting, db, prompts, repo, settlement
+from pokerpot import __version__, accounting, db, export, prompts, repo, settlement
 from pokerpot.errors import NotFoundError, PokerPotError, StateError, ValidationError
 from pokerpot.money import format_money, parse_money
 from pokerpot.render import (
@@ -354,6 +354,64 @@ def session_reopen(
             raise ValidationError("A session ID is required.")
         reopened = repo.reopen_session(conn, session_id)
     console.print(f"Session [bold]{reopened.name}[/bold] (id {reopened.id}) reopened.")
+
+
+def _export_data(conn: sqlite3.Connection, session: repo.Session) -> export.ExportData:
+    players = repo.session_players(conn, session.id)
+    rounds = repo.list_rounds(conn, session.id)
+    balances = repo.session_balances(conn, session.id)
+    return export.ExportData(
+        session=session,
+        players=players,
+        rounds=rounds,
+        balances=balances,
+        transfers=settlement.settle(balances),
+    )
+
+
+@session_app.command("export")
+@handle_errors
+def session_export(
+    ctx: typer.Context,
+    session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
+    export_format: str = typer.Option("text", "--format", "-f", help="text, json or csv."),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Write the report to a file instead of stdout."
+    ),
+) -> None:
+    """Export a session for sharing or verification."""
+    if export_format not in export.FORMATS:
+        raise ValidationError(
+            f"Unknown format {export_format!r}; choose one of: {', '.join(export.FORMATS)}."
+        )
+    with _db(ctx) as conn:
+        found = _require_session(conn, session)
+        data = _export_data(conn, found)
+    if export_format == "text":
+        rendered = export.session_to_text(data)
+    elif export_format == "json":
+        rendered = export.session_to_json(data)
+    else:
+        rendered = export.session_to_csv(data)
+    if output is None:
+        typer.echo(rendered, nl=False)
+        return
+    path = output.expanduser()
+    path.write_text(rendered, encoding="utf-8")
+    console.print(f"Wrote {export_format} report to {path}.")
+
+
+@app.command("history")
+@handle_errors
+def history(ctx: typer.Context) -> None:
+    """List completed sessions."""
+    with _db(ctx) as conn:
+        sessions = repo.list_sessions(conn, "completed")
+    if not sessions:
+        console.print("No completed sessions yet.")
+        return
+    console.print(session_table(sessions))
+    console.print("Use 'pokerpot session show <id>' for details.")
 
 
 def _participant_names(conn: sqlite3.Connection, player_ids: list[int]) -> dict[int, str]:
