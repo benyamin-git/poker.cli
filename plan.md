@@ -1,5 +1,7 @@
 # PokerPot — Implementation Plan v2
 
+> Status: implemented as v0.1.0. See README.md for usage.
+
 This document is the source of truth for the project. It replaces an earlier
 draft plan that has been deleted.
 
@@ -76,7 +78,7 @@ src/pokerpot/
   db.py        repo.py                    # connection+migrations; typed queries
   accounting.py settlement.py stats.py    # pure engine, no CLI imports
   money.py     export.py     render.py    # cents; text/json/csv; Rich tables
-  errors.py
+  prompts.py   errors.py                  # interactive flows; domain errors
 tests/  test_money, test_accounting, test_settlement, test_stats, test_db, test_cli
 ```
 

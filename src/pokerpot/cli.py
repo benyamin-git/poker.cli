@@ -37,7 +37,10 @@ app = typer.Typer(
 )
 player_app = typer.Typer(help="Manage players.", no_args_is_help=True)
 session_app = typer.Typer(help="Manage poker sessions.", no_args_is_help=True)
-round_app = typer.Typer(help="Record and inspect rounds.", no_args_is_help=False)
+round_app = typer.Typer(
+    help="Record and inspect rounds. Run 'pokerpot round' for interactive entry.",
+    no_args_is_help=False,
+)
 app.add_typer(player_app, name="player")
 app.add_typer(session_app, name="session")
 app.add_typer(round_app, name="round")
