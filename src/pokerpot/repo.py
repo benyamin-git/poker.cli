@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pokerpot import accounting
 from pokerpot.accounting import validate_round
 from pokerpot.errors import ConflictError, NotFoundError, StateError, ValidationError
 
@@ -466,6 +467,16 @@ def list_rounds(conn: sqlite3.Connection, session_id: int) -> list[Round]:
         "SELECT * FROM rounds WHERE session_id = ? ORDER BY number", (session_id,)
     ).fetchall()
     return [_round_from_row(row, _round_participants(conn, row["id"])) for row in rows]
+
+
+def session_balances(conn: sqlite3.Connection, session_id: int) -> dict[int, int]:
+    """Compute every session player's net cents from the recorded rounds."""
+    player_ids = [player.id for player in session_players(conn, session_id)]
+    rounds = [
+        [(p.player_id, p.role, p.amount_cents) for p in round_.participants]
+        for round_ in list_rounds(conn, session_id)
+    ]
+    return accounting.session_balances(player_ids, rounds)
 
 
 def last_round(conn: sqlite3.Connection, session_id: int) -> Round | None:

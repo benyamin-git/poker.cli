@@ -12,10 +12,11 @@ from typing import Any, TypeVar, cast
 
 import typer
 
-from pokerpot import __version__, accounting, db, prompts, repo
+from pokerpot import __version__, accounting, db, prompts, repo, settlement
 from pokerpot.errors import NotFoundError, PokerPotError, StateError, ValidationError
 from pokerpot.money import format_money, parse_money
 from pokerpot.render import (
+    balance_table,
     console,
     delta_table,
     err_console,
@@ -23,6 +24,7 @@ from pokerpot.render import (
     player_table,
     round_table,
     session_table,
+    settlement_table,
 )
 
 app = typer.Typer(
@@ -240,23 +242,37 @@ def session_show(
     ctx: typer.Context,
     session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
     rounds: bool = typer.Option(False, "--rounds", help="Also list every round."),
+    show_settlement: bool = typer.Option(False, "--settlement", help="Also show the settlement."),
 ) -> None:
-    """Show a session and its players."""
+    """Show a session, its players and current balances."""
     with _db(ctx) as conn:
         found = _require_session(conn, session)
         players = repo.session_players(conn, found.id)
+        balances = repo.session_balances(conn, found.id)
         recorded_rounds = repo.list_rounds(conn, found.id) if rounds else []
     console.print(f"Session:  [bold]{found.name}[/bold]")
     console.print(f"ID:       {found.id}")
     console.print(f"Status:   {found.status}")
     console.print(f"Started:  {local_time(found.started_at)}")
     console.print(f"Ended:    {local_time(found.ended_at) if found.ended_at else '-'}")
+    console.print(f"Players:  {found.player_count}")
     console.print(f"Rounds:   {found.round_count}")
-    console.print()
-    if players:
-        console.print(player_table(players))
-    else:
+    if not players:
+        console.print()
         console.print("No players in this session.")
+        return
+    console.print()
+    console.print("[bold]Balances[/bold]")
+    console.print(balance_table(players, balances))
+    if show_settlement:
+        label = "Settlement" if found.status == "completed" else "Projected settlement"
+        console.print()
+        console.print(f"[bold]{label}[/bold]")
+        transfers = settlement.settle(balances)
+        if transfers:
+            console.print(settlement_table(transfers, {p.id: p.name for p in players}))
+        else:
+            console.print("All settled up.")
     if rounds:
         console.print()
         if recorded_rounds:
@@ -301,13 +317,27 @@ def session_end(
     session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
-    """End a poker session."""
+    """End a poker session and show final standings and settlement."""
     with _db(ctx) as conn:
         found = _require_session(conn, session)
         if not yes:
             typer.confirm(f"End session {found.name!r}?", abort=True)
+        players = repo.session_players(conn, found.id)
+        balances = repo.session_balances(conn, found.id)
+        transfers = settlement.settle(balances)
         ended = repo.end_session(conn, found.id)
     console.print(f"Session [bold]{ended.name}[/bold] (id {ended.id}) ended.")
+    console.print(f"Rounds: {ended.round_count}")
+    console.print()
+    console.print("[bold]Final standings[/bold]")
+    console.print(balance_table(players, balances))
+    console.print()
+    console.print("[bold]Settlement[/bold]")
+    if transfers:
+        console.print(settlement_table(transfers, {p.id: p.name for p in players}))
+    else:
+        console.print("All settled up.")
+    console.print()
     console.print(f"View it with: pokerpot session show {ended.id}")
 
 

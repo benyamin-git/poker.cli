@@ -39,3 +39,4 @@ def test_format_money() -> None:
     assert format_money(-2050) == "-$20.50"
     assert format_money(2050, plus=True) == "+$20.50"
     assert format_money(-2050, plus=True) == "-$20.50"
+    assert format_money(0, plus=True) == "$0.00"

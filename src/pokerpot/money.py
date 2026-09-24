@@ -25,6 +25,6 @@ def parse_money(text: str) -> int:
 
 def format_money(cents: int, *, plus: bool = False) -> str:
     """Format cents as ``$20.50`` (or ``-$20.50`` / ``+$20.50``)."""
-    sign = "-" if cents < 0 else ("+" if plus else "")
+    sign = "-" if cents < 0 else ("+" if plus and cents > 0 else "")
     value = abs(cents)
     return f"{sign}${value // 100}.{value % 100:02d}"

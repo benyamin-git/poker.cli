@@ -52,6 +52,33 @@ def delta_table(entries: list[tuple[str, int]]) -> Table:
     return table
 
 
+def balance_table(players: list[Player], balances: dict[int, int]) -> Table:
+    table = Table(header_style="bold")
+    table.add_column("Player")
+    table.add_column("Balance", justify="right")
+    entries = sorted(
+        ((player.name, balances.get(player.id, 0)) for player in players),
+        key=lambda item: (-item[1], item[0].lower()),
+    )
+    for name, balance in entries:
+        style = "green" if balance > 0 else ("red" if balance < 0 else "dim")
+        table.add_row(name, f"[{style}]{format_money(balance, plus=True)}[/{style}]")
+    table.add_section()
+    total = sum(balances.values())
+    table.add_row("[bold]Total[/bold]", f"[bold]{format_money(total, plus=True)}[/bold]")
+    return table
+
+
+def settlement_table(transfers: list[tuple[int, int, int]], names: dict[int, str]) -> Table:
+    table = Table(header_style="bold")
+    table.add_column("From")
+    table.add_column("To")
+    table.add_column("Amount", justify="right")
+    for from_id, to_id, amount in transfers:
+        table.add_row(names[from_id], names[to_id], format_money(amount))
+    return table
+
+
 def _participants_text(participants: tuple[Participant, ...]) -> str:
     return ", ".join(
         f"{participant.player_name} {format_money(participant.amount_cents)}"
