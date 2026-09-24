@@ -12,7 +12,7 @@ from typing import Any, TypeVar, cast
 
 import typer
 
-from pokerpot import __version__, accounting, db, export, prompts, repo, settlement
+from pokerpot import __version__, accounting, db, export, prompts, repo, settlement, stats
 from pokerpot.errors import NotFoundError, PokerPotError, StateError, ValidationError
 from pokerpot.money import format_money, parse_money
 from pokerpot.render import (
@@ -25,6 +25,8 @@ from pokerpot.render import (
     round_table,
     session_table,
     settlement_table,
+    stats_detail_table,
+    stats_table,
 )
 
 app = typer.Typer(
@@ -399,6 +401,44 @@ def session_export(
     path = output.expanduser()
     path.write_text(rendered, encoding="utf-8")
     console.print(f"Wrote {export_format} report to {path}.")
+
+
+def _stats_records(conn: sqlite3.Connection) -> list[stats.SessionRecord]:
+    records: list[stats.SessionRecord] = []
+    for session in repo.list_sessions(conn, "completed"):
+        records.append(
+            stats.SessionRecord(
+                session=session,
+                player_ids=[player.id for player in repo.session_players(conn, session.id)],
+                rounds=repo.list_rounds(conn, session.id),
+            )
+        )
+    return records
+
+
+@app.command("stats")
+@handle_errors
+def stats_command(
+    ctx: typer.Context,
+    player: str | None = typer.Argument(
+        None, help="Player name or ID (defaults to a summary of all players)."
+    ),
+) -> None:
+    """Show accounting statistics derived from completed sessions."""
+    with _db(ctx) as conn:
+        records = _stats_records(conn)
+        if player is None:
+            players = repo.list_players(conn)
+            if not players:
+                console.print("No players yet. Add one with: pokerpot player add NAME")
+                return
+            by_id = {found.id: stats.compute_player_stats(found.id, records) for found in players}
+            console.print(stats_table(players, by_id))
+            console.print("Completed sessions only; use 'pokerpot stats PLAYER' for details.")
+            return
+        found = repo.get_player(conn, player)
+        player_stats = stats.compute_player_stats(found.id, records)
+    console.print(stats_detail_table(player_stats, found.name))
 
 
 @app.command("history")

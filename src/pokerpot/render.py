@@ -9,6 +9,7 @@ from rich.table import Table
 
 from pokerpot.money import format_money
 from pokerpot.repo import Participant, Player, Round, Session
+from pokerpot.stats import PlayerStats
 
 console = Console()
 err_console = Console(stderr=True)
@@ -39,6 +40,81 @@ def session_table(sessions: list[Session]) -> Table:
             local_time(session.started_at),
             local_time(session.ended_at) if session.ended_at else "-",
         )
+    return table
+
+
+def _rate(rate: float, played: int) -> str:
+    return "—" if not played else f"{rate * 100:.1f}%"
+
+
+def _optional_money(cents: int | None, *, plus: bool = True) -> str:
+    return "—" if cents is None else format_money(cents, plus=plus)
+
+
+def _optional_loss(cents: int | None) -> str:
+    return "—" if cents is None else format_money(-cents)
+
+
+def stats_table(players: list[Player], stats_by_id: dict[int, PlayerStats]) -> Table:
+    table = Table(header_style="bold")
+    table.add_column("Player")
+    table.add_column("Sessions", justify="right")
+    table.add_column("Net", justify="right")
+    table.add_column("Won", justify="right")
+    table.add_column("Lost", justify="right")
+    table.add_column("Win %", justify="right")
+    table.add_column("Rounds", justify="right")
+    table.add_column("Round win %", justify="right")
+    entries = sorted(
+        players, key=lambda player: (-stats_by_id[player.id].total_net_cents, player.name.lower())
+    )
+    for player in entries:
+        player_stats = stats_by_id[player.id]
+        table.add_row(
+            player.name,
+            str(player_stats.sessions_played),
+            format_money(player_stats.total_net_cents, plus=True),
+            format_money(player_stats.total_won_cents),
+            format_money(player_stats.total_lost_cents),
+            _rate(player_stats.session_win_rate, player_stats.sessions_played),
+            str(player_stats.rounds_played),
+            _rate(player_stats.round_win_rate, player_stats.rounds_played),
+        )
+    return table
+
+
+def stats_detail_table(player_stats: PlayerStats, name: str) -> Table:
+    table = Table(title=f"Statistics for {name}", header_style="bold", show_header=False)
+    table.add_column("Statistic")
+    table.add_column("Value", justify="right")
+    rows = [
+        ("Sessions played", str(player_stats.sessions_played)),
+        ("Total net", format_money(player_stats.total_net_cents, plus=True)),
+        ("Total won (session totals)", format_money(player_stats.total_won_cents)),
+        ("Total lost (session totals)", format_money(player_stats.total_lost_cents)),
+        ("Profitable sessions", str(player_stats.profitable_sessions)),
+        ("Losing sessions", str(player_stats.losing_sessions)),
+        ("Break-even sessions", str(player_stats.break_even_sessions)),
+        ("Session win rate", _rate(player_stats.session_win_rate, player_stats.sessions_played)),
+        ("Average session", format_money(player_stats.average_session_cents, plus=True)),
+        ("Median session", format_money(player_stats.median_session_cents, plus=True)),
+        ("Best session", _optional_money(player_stats.best_session_cents)),
+        ("Worst session", _optional_money(player_stats.worst_session_cents)),
+        ("Longest winning streak", str(player_stats.longest_winning_streak)),
+        ("Longest losing streak", str(player_stats.longest_losing_streak)),
+        ("Rounds played", str(player_stats.rounds_played)),
+        ("Rounds won", str(player_stats.rounds_won)),
+        ("Rounds lost", str(player_stats.rounds_lost)),
+        ("Round win rate", _rate(player_stats.round_win_rate, player_stats.rounds_played)),
+        ("Total from winning rounds", format_money(player_stats.total_round_won_cents)),
+        ("Total lost in losing rounds", format_money(player_stats.total_round_lost_cents)),
+        ("Best single-round win", _optional_money(player_stats.best_round_win_cents)),
+        ("Worst single-round loss", _optional_loss(player_stats.worst_round_loss_cents)),
+        ("Average winning round", _optional_money(player_stats.average_winning_round_cents)),
+        ("Average losing round", _optional_loss(player_stats.average_losing_round_cents)),
+    ]
+    for label, value in rows:
+        table.add_row(label, value)
     return table
 
 
