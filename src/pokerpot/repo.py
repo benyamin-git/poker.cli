@@ -6,9 +6,10 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from pokerpot.errors import ConflictError, NotFoundError, ValidationError
+from pokerpot.errors import ConflictError, NotFoundError, StateError, ValidationError
 
 MAX_NAME_LENGTH = 40
+MAX_SESSION_NAME_LENGTH = 60
 
 _PLAYER_COLUMNS = """
     p.id, p.name, p.created_at,
@@ -26,12 +27,23 @@ class Player:
     round_count: int = 0
 
 
+@dataclass(frozen=True)
+class Session:
+    id: int
+    name: str
+    status: str
+    started_at: str
+    ended_at: str | None
+    player_count: int = 0
+    round_count: int = 0
+
+
 def now_utc() -> str:
     """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _clean_name(name: str) -> str:
+def clean_player_name(name: str) -> str:
     cleaned = " ".join(name.split())
     if not cleaned:
         raise ValidationError("Player name cannot be empty.")
@@ -56,7 +68,7 @@ def _player_from_row(row: sqlite3.Row) -> Player:
 
 def add_player(conn: sqlite3.Connection, name: str) -> Player:
     """Create a player and return it."""
-    cleaned = _clean_name(name)
+    cleaned = clean_player_name(name)
     created_at = now_utc()
     try:
         with conn:
@@ -95,7 +107,7 @@ def get_player(conn: sqlite3.Connection, ref: str) -> Player:
 def rename_player(conn: sqlite3.Connection, ref: str, new_name: str) -> Player:
     """Rename a player, keeping all history attached."""
     player = get_player(conn, ref)
-    cleaned = _clean_name(new_name)
+    cleaned = clean_player_name(new_name)
     try:
         with conn:
             conn.execute("UPDATE players SET name = ? WHERE id = ?", (cleaned, player.id))
@@ -115,3 +127,211 @@ def delete_player(conn: sqlite3.Connection, ref: str) -> Player:
     with conn:
         conn.execute("DELETE FROM players WHERE id = ?", (player.id,))
     return player
+
+
+_SESSION_COLUMNS = """
+    s.id, s.name, s.status, s.started_at, s.ended_at,
+    (SELECT COUNT(*) FROM session_players sp WHERE sp.session_id = s.id) AS player_count,
+    (SELECT COUNT(*) FROM rounds r WHERE r.session_id = s.id) AS round_count
+"""
+
+
+def default_session_name() -> str:
+    """Return the local-time default name for a new session."""
+    return datetime.now().astimezone().strftime("Session %Y-%m-%d %H:%M")
+
+
+def _clean_session_name(name: str | None) -> str:
+    if name is None:
+        return default_session_name()
+    cleaned = " ".join(name.split())
+    if not cleaned:
+        raise ValidationError("Session name cannot be empty.")
+    if len(cleaned) > MAX_SESSION_NAME_LENGTH:
+        raise ValidationError(
+            f"Session name cannot be longer than {MAX_SESSION_NAME_LENGTH} characters."
+        )
+    return cleaned
+
+
+def _session_from_row(row: sqlite3.Row) -> Session:
+    return Session(
+        id=row["id"],
+        name=row["name"],
+        status=row["status"],
+        started_at=row["started_at"],
+        ended_at=row["ended_at"],
+        player_count=row["player_count"],
+        round_count=row["round_count"],
+    )
+
+
+def get_active_session(conn: sqlite3.Connection) -> Session | None:
+    """Return the currently active session, if any."""
+    row = conn.execute(
+        f"SELECT {_SESSION_COLUMNS} FROM sessions s WHERE s.status = 'active'"
+    ).fetchone()
+    return _session_from_row(row) if row else None
+
+
+def require_active_session(conn: sqlite3.Connection) -> Session:
+    """Return the active session or raise a state error."""
+    session = get_active_session(conn)
+    if session is None:
+        raise StateError("No active session. Start one with: pokerpot session start")
+    return session
+
+
+def get_session(conn: sqlite3.Connection, session_id: int) -> Session:
+    """Look up a session by ID."""
+    row = conn.execute(
+        f"SELECT {_SESSION_COLUMNS} FROM sessions s WHERE s.id = ?", (session_id,)
+    ).fetchone()
+    if row is None:
+        raise NotFoundError(f"Session {session_id} not found.")
+    return _session_from_row(row)
+
+
+def list_sessions(conn: sqlite3.Connection, status: str | None = None) -> list[Session]:
+    """Return sessions, active first, newest first."""
+    query = f"SELECT {_SESSION_COLUMNS} FROM sessions s"
+    params: tuple[object, ...] = ()
+    if status is not None:
+        query += " WHERE s.status = ?"
+        params = (status,)
+    query += " ORDER BY (s.status = 'active') DESC, s.started_at DESC, s.id DESC"
+    return [_session_from_row(row) for row in conn.execute(query, params).fetchall()]
+
+
+def start_session(conn: sqlite3.Connection, name: str | None, player_ids: list[int]) -> Session:
+    """Start a new session with the given players."""
+    if get_active_session(conn) is not None:
+        raise StateError("A session is already active. End it first with: pokerpot session end")
+    cleaned = _clean_session_name(name)
+    unique_ids = list(dict.fromkeys(player_ids))
+    if not unique_ids:
+        raise ValidationError("A session needs at least one player.")
+    players = [get_player(conn, str(player_id)) for player_id in unique_ids]
+    try:
+        with conn:
+            session_id = conn.execute(
+                "INSERT INTO sessions (name, status, started_at) VALUES (?, 'active', ?)",
+                (cleaned, now_utc()),
+            ).lastrowid
+            conn.executemany(
+                "INSERT INTO session_players (session_id, player_id) VALUES (?, ?)",
+                [(session_id, player.id) for player in players],
+            )
+    except sqlite3.IntegrityError as exc:
+        raise StateError(
+            "A session is already active. End it first with: pokerpot session end"
+        ) from exc
+    return get_session(conn, session_id)
+
+
+def session_players(conn: sqlite3.Connection, session_id: int) -> list[Player]:
+    """Return the players of a session, ordered by name."""
+    rows = conn.execute(
+        f"""
+        SELECT {_PLAYER_COLUMNS}
+        FROM session_players sp
+        JOIN players p ON p.id = sp.player_id
+        WHERE sp.session_id = ?
+        ORDER BY p.name COLLATE NOCASE
+        """,
+        (session_id,),
+    ).fetchall()
+    return [_player_from_row(row) for row in rows]
+
+
+def add_session_player(conn: sqlite3.Connection, session_id: int, ref: str) -> tuple[Player, bool]:
+    """Add a player to an active session, creating the player if needed."""
+    session = get_session(conn, session_id)
+    if session.status != "active":
+        raise StateError(
+            f"Session {session.name!r} has ended. Reopen it with: "
+            f"pokerpot session reopen {session.id}"
+        )
+    created = False
+    try:
+        player = get_player(conn, ref)
+    except NotFoundError:
+        player = add_player(conn, ref)
+        created = True
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO session_players (session_id, player_id) VALUES (?, ?)",
+                (session.id, player.id),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise ConflictError(f"Player {player.name!r} is already in this session.") from exc
+    return player, created
+
+
+def remove_session_player(conn: sqlite3.Connection, session_id: int, ref: str) -> Player:
+    """Remove a player from an active session if they have no rounds there."""
+    session = get_session(conn, session_id)
+    if session.status != "active":
+        raise StateError(
+            f"Session {session.name!r} has ended. Reopen it with: "
+            f"pokerpot session reopen {session.id}"
+        )
+    player = get_player(conn, ref)
+    in_session = conn.execute(
+        "SELECT 1 FROM session_players WHERE session_id = ? AND player_id = ?",
+        (session.id, player.id),
+    ).fetchone()
+    if in_session is None:
+        raise NotFoundError(f"Player {player.name!r} is not in session {session.name!r}.")
+    rounds_played = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM round_participants rp
+        JOIN rounds r ON r.id = rp.round_id
+        WHERE r.session_id = ? AND rp.player_id = ?
+        """,
+        (session.id, player.id),
+    ).fetchone()[0]
+    if rounds_played:
+        raise ConflictError(
+            f"Player {player.name!r} has {rounds_played} recorded round(s) in this "
+            "session and cannot be removed."
+        )
+    with conn:
+        conn.execute(
+            "DELETE FROM session_players WHERE session_id = ? AND player_id = ?",
+            (session.id, player.id),
+        )
+    return player
+
+
+def end_session(conn: sqlite3.Connection, session_id: int) -> Session:
+    """Mark a session as completed."""
+    session = get_session(conn, session_id)
+    if session.status == "completed":
+        raise StateError(f"Session {session.name!r} has already ended.")
+    with conn:
+        conn.execute(
+            "UPDATE sessions SET status = 'completed', ended_at = ? WHERE id = ?",
+            (now_utc(), session.id),
+        )
+    return get_session(conn, session.id)
+
+
+def reopen_session(conn: sqlite3.Connection, session_id: int) -> Session:
+    """Reopen a completed session so it can be corrected."""
+    session = get_session(conn, session_id)
+    if session.status == "active":
+        raise StateError(f"Session {session.name!r} is already active.")
+    active = get_active_session(conn)
+    if active is not None:
+        raise StateError(
+            f"Session {active.name!r} is still active. End it first with: pokerpot session end"
+        )
+    with conn:
+        conn.execute(
+            "UPDATE sessions SET status = 'active', ended_at = NULL WHERE id = ?",
+            (session.id,),
+        )
+    return get_session(conn, session.id)

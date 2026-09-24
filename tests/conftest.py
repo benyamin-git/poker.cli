@@ -41,5 +41,9 @@ def invoke(runner: CliRunner, db_path: Path):
 
 
 def output_of(result) -> str:
-    """Return stdout plus stderr regardless of the click version."""
-    return (result.output or "") + (getattr(result, "stderr", None) or "")
+    """Return combined output regardless of how the runner captures stderr."""
+    output = result.output or ""
+    stderr = getattr(result, "stderr", None) or ""
+    if stderr and stderr not in output:
+        return output + stderr
+    return output

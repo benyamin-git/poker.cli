@@ -12,9 +12,9 @@ from typing import Any, TypeVar, cast
 
 import typer
 
-from pokerpot import __version__, db, repo
-from pokerpot.errors import PokerPotError
-from pokerpot.render import console, err_console, local_time, player_table
+from pokerpot import __version__, db, prompts, repo
+from pokerpot.errors import NotFoundError, PokerPotError, ValidationError
+from pokerpot.render import console, err_console, local_time, player_table, session_table
 
 app = typer.Typer(
     name="pokerpot",
@@ -23,7 +23,9 @@ app = typer.Typer(
     add_completion=False,
 )
 player_app = typer.Typer(help="Manage players.", no_args_is_help=True)
+session_app = typer.Typer(help="Manage poker sessions.", no_args_is_help=True)
 app.add_typer(player_app, name="player")
+app.add_typer(session_app, name="session")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -158,3 +160,148 @@ def player_delete(
             )
         repo.delete_player(conn, str(found.id))
     console.print(f"Deleted player [bold]{found.name}[/bold].")
+
+
+def _parse_session_id(ref: str | None) -> int | None:
+    if ref is None:
+        return None
+    if not ref.strip().isdigit():
+        raise NotFoundError(f"Invalid session ID {ref!r}; expected a number.")
+    return int(ref)
+
+
+def _require_session(conn: sqlite3.Connection, ref: str | None) -> repo.Session:
+    session_id = _parse_session_id(ref)
+    if session_id is None:
+        return repo.require_active_session(conn)
+    return repo.get_session(conn, session_id)
+
+
+def _resolve_players_arg(conn: sqlite3.Connection, raw: str) -> list[repo.Player]:
+    tokens = [token.strip() for token in raw.split(",") if token.strip()]
+    if not tokens:
+        raise ValidationError("--players needs at least one player name or ID.")
+    players: list[repo.Player] = []
+    for token in tokens:
+        player = repo.get_player(conn, token)
+        if player not in players:
+            players.append(player)
+    return players
+
+
+@session_app.command("start")
+@handle_errors
+def session_start(
+    ctx: typer.Context,
+    name: str | None = typer.Option(None, "--name", "-n", help="Optional session name."),
+    players_arg: str | None = typer.Option(
+        None,
+        "--players",
+        help="Comma-separated player names or IDs (skips the interactive picker).",
+    ),
+) -> None:
+    """Start a new poker session."""
+    with _db(ctx) as conn:
+        if players_arg is not None:
+            players = _resolve_players_arg(conn, players_arg)
+        else:
+            players = prompts.select_players(conn)
+        session = repo.start_session(conn, name, [player.id for player in players])
+    console.print(f"Started session [bold]{session.name}[/bold] (id {session.id}).")
+    console.print("Record rounds with: pokerpot round")
+
+
+@session_app.command("list")
+@handle_errors
+def session_list(ctx: typer.Context) -> None:
+    """List all sessions."""
+    with _db(ctx) as conn:
+        sessions = repo.list_sessions(conn)
+    if not sessions:
+        console.print("No sessions yet. Start one with: pokerpot session start")
+        return
+    console.print(session_table(sessions))
+
+
+@session_app.command("show")
+@handle_errors
+def session_show(
+    ctx: typer.Context,
+    session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
+) -> None:
+    """Show a session and its players."""
+    with _db(ctx) as conn:
+        found = _require_session(conn, session)
+        players = repo.session_players(conn, found.id)
+    console.print(f"Session:  [bold]{found.name}[/bold]")
+    console.print(f"ID:       {found.id}")
+    console.print(f"Status:   {found.status}")
+    console.print(f"Started:  {local_time(found.started_at)}")
+    console.print(f"Ended:    {local_time(found.ended_at) if found.ended_at else '-'}")
+    console.print(f"Rounds:   {found.round_count}")
+    console.print()
+    if players:
+        console.print(player_table(players))
+    else:
+        console.print("No players in this session.")
+
+
+@session_app.command("add-player")
+@handle_errors
+def session_add_player(
+    ctx: typer.Context,
+    player: str = typer.Argument(..., help="Player name or ID; unknown names are created."),
+) -> None:
+    """Add a player to the active session."""
+    with _db(ctx) as conn:
+        session = repo.require_active_session(conn)
+        found, created = repo.add_session_player(conn, session.id, player)
+    if created:
+        console.print(f"Created player [bold]{found.name}[/bold] and added them to the session.")
+    else:
+        console.print(f"Added [bold]{found.name}[/bold] to the session.")
+
+
+@session_app.command("remove-player")
+@handle_errors
+def session_remove_player(
+    ctx: typer.Context,
+    player: str = typer.Argument(..., help="Player name or ID."),
+) -> None:
+    """Remove a player from the active session (only if they have no rounds)."""
+    with _db(ctx) as conn:
+        session = repo.require_active_session(conn)
+        found = repo.remove_session_player(conn, session.id, player)
+    console.print(f"Removed [bold]{found.name}[/bold] from the session.")
+
+
+@session_app.command("end")
+@handle_errors
+def session_end(
+    ctx: typer.Context,
+    session: str | None = typer.Argument(None, help="Session ID (defaults to the active session)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+) -> None:
+    """End a poker session."""
+    with _db(ctx) as conn:
+        found = _require_session(conn, session)
+        if not yes:
+            typer.confirm(f"End session {found.name!r}?", abort=True)
+        ended = repo.end_session(conn, found.id)
+    console.print(f"Session [bold]{ended.name}[/bold] (id {ended.id}) ended.")
+    console.print(f"View it with: pokerpot session show {ended.id}")
+
+
+@session_app.command("reopen")
+@handle_errors
+def session_reopen(
+    ctx: typer.Context,
+    session: str = typer.Argument(..., help="Session ID."),
+) -> None:
+    """Reopen a completed session so it can be corrected."""
+    with _db(ctx) as conn:
+        session_id = _parse_session_id(session)
+        if session_id is None:  # pragma: no cover - the argument is required
+            raise ValidationError("A session ID is required.")
+        reopened = repo.reopen_session(conn, session_id)
+    console.print(f"Session [bold]{reopened.name}[/bold] (id {reopened.id}) reopened.")

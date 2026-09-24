@@ -7,7 +7,7 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
-from pokerpot.repo import Player
+from pokerpot.repo import Player, Session
 
 console = Console()
 err_console = Console(stderr=True)
@@ -16,6 +16,29 @@ err_console = Console(stderr=True)
 def local_time(iso_timestamp: str) -> str:
     """Render a stored UTC timestamp in the local timezone."""
     return datetime.fromisoformat(iso_timestamp).astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def session_table(sessions: list[Session]) -> Table:
+    table = Table(header_style="bold")
+    table.add_column("ID", justify="right", style="dim")
+    table.add_column("Name")
+    table.add_column("Status")
+    table.add_column("Players", justify="right")
+    table.add_column("Rounds", justify="right")
+    table.add_column("Started")
+    table.add_column("Ended")
+    for session in sessions:
+        status = "[green]active[/green]" if session.status == "active" else "[dim]completed[/dim]"
+        table.add_row(
+            str(session.id),
+            session.name,
+            status,
+            str(session.player_count),
+            str(session.round_count),
+            local_time(session.started_at),
+            local_time(session.ended_at) if session.ended_at else "-",
+        )
+    return table
 
 
 def player_table(players: list[Player]) -> Table:
