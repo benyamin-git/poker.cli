@@ -254,4 +254,4 @@ centralized in `render.py` and `prompts.py`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[LICENSE](LICENSE).
