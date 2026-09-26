@@ -1,6 +1,7 @@
 # poker.cli — Implementation Plan v2
 
-> Status: implemented as v0.1.0. See README.md for usage.
+> Status: **Unmaintained / no longer active.** Implemented as v0.1.0; the project
+> is archived and receives no further updates. See README.md for usage.
 
 This document is the source of truth for the project. It replaces an earlier
 draft plan that has been deleted.

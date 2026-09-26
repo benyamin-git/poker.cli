@@ -1,5 +1,9 @@
 # poker.cli
 
+> **⚠️ Unmaintained / no longer active.** This project is archived and is no
+> longer maintained. No further updates, bug fixes, or support will be provided.
+> The code is left public for reference only.
+
 A CLI-only ledger for poker-night money between friends.
 
 poker.cli records one thing: **who lost how much and who won the resulting
